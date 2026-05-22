@@ -1,0 +1,4 @@
+<option value="">Все</option>
+{% for code, label in pipeline_stages_for_filter %}
+  <option value="{{ code }}" {% if selected_stage == code %}selected{% endif %}>{{ label }}</option>
+{% endfor %}

@@ -1,0 +1,36 @@
+{% for c in clients_for_modal %}
+<tr>
+  <td>
+    <input type="checkbox"
+           class="form-check-input client-checkbox"
+           name="client_ids"
+           value="{{ c.id }}">
+  </td>
+  <td>
+    <a href="{% url 'crm:client_detail' c.id %}" target="_blank">
+      {{ c.full_name }}
+    </a>
+  </td>
+  <td>{{ c.phone }}</td>
+  <td>{{ c.email }}</td>
+  <td>{{ c.get_client_type_display }}</td>
+  <td>
+    {% if c.responsible %}
+      {{ c.responsible.get_full_name|default:c.responsible.username }}
+    {% else %}
+      <span class="text-muted">Не назначен</span>
+    {% endif %}
+  </td>
+  <td>
+    {% if c.pipeline_stage %}
+      {{ c.get_pipeline_stage_display }}
+    {% else %}
+      <span class="text-muted">не задан</span>
+    {% endif %}
+  </td>
+</tr>
+{% empty %}
+<tr>
+  <td colspan="7" class="text-muted">По текущим фильтрам клиенты не найдены.</td>
+</tr>
+{% endfor %}

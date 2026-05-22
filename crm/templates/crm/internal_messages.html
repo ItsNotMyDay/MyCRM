@@ -1,0 +1,254 @@
+{% extends "crm/base.html" %}
+{% load static %}
+
+{% block title %}Внутренние коммуникации{% endblock %}
+
+{% block content %}
+<h1>Внутренние коммуникации</h1>
+
+<style>
+  .im-dialog-wrapper {
+    height: 420px;
+    overflow-y: auto;
+    background: #f5f5f5;
+    padding: 8px;
+  }
+  .im-message-row {
+    margin-bottom: 8px;
+    display: flex;
+  }
+  .im-message-row.incoming {
+    justify-content: flex-start;
+  }
+  .im-message-row.outgoing {
+    justify-content: flex-end;
+  }
+  .im-message-bubble {
+    max-width: 75%;
+    padding: 6px 10px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+  }
+  .im-message-bubble.incoming {
+    background-color: #e9ecef;
+    color: #212529;
+    border: 1px solid #d0d4da;
+  }
+  .im-message-bubble.outgoing {
+    background-color: #0d6efd;
+    color: #ffffff;
+    border: 1px solid #0a58ca;
+  }
+  .im-message-meta {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    margin-bottom: 2px;
+  }
+</style>
+
+<div class="row">
+  <div class="col-md-3 mb-3">
+    <h5>Сотрудники</h5>
+	
+    <ul class="list-group">
+<ul class="list-group">
+  {% for u, unread_count in users_with_unread %}
+    <li class="list-group-item d-flex justify-content-between align-items-center
+               {% if selected_user and u.id == selected_user.id %}active{% endif %}">
+      <a href="{% url 'crm:internal_messages' %}?user={{ u.id }}"
+         class="{% if selected_user and u.id == selected_user.id %}text-white{% else %}text-decoration-none{% endif %}">
+        {{ u.get_full_name|default:u.username }}
+      </a>
+      {% if unread_count %}
+        <span class="badge rounded-pill bg-primary">{{ unread_count }}</span>
+      {% endif %}
+    </li>
+  {% empty %}
+    <li class="list-group-item text-muted">Нет других пользователей</li>
+  {% endfor %}
+</ul>
+	
+  </div>
+
+  <div class="col-md-9">
+    {% if selected_user %}
+      <h5>Диалог с {{ selected_user.get_full_name|default:selected_user.username }}</h5>
+
+      <div class="im-dialog-wrapper border rounded mb-3" id="imDialog">
+        {% if dialogue_messages %}
+          {% for m in dialogue_messages %}
+            {% if m.sender_id == request.user.id %}
+              <div class="im-message-row outgoing">
+                <div class="im-message-bubble outgoing">
+                  <div class="im-message-meta text-end">
+                    Вы • {{ m.created_at|date:"d.m.Y H:i" }}
+                  </div>
+                  <div class="im-message-text">
+                    {{ m.text|safe }}
+                  </div>
+                  {% if m.attachments.all %}
+                    <div class="mt-2 small">
+                      {% for a in m.attachments.all %}
+                        <div>
+                          <a href="{{ a.file.url }}" class="link-light" download>
+                            📎 {{ a.original_name|default:a.file.name }}
+                          </a>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            {% else %}
+              <div class="im-message-row incoming">
+                <div class="im-message-bubble incoming">
+                  <div class="im-message-meta">
+                    {{ m.sender.get_full_name|default:m.sender.username }} • {{ m.created_at|date:"d.m.Y H:i" }}
+                  </div>
+                  <div class="im-message-text">
+                    {{ m.text|safe }}
+                  </div>
+                  {% if m.attachments.all %}
+                    <div class="mt-2 small">
+                      {% for a in m.attachments.all %}
+                        <div>
+                          <a href="{{ a.file.url }}" download>
+                            📎 {{ a.original_name|default:a.file.name }}
+                          </a>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          <p class="text-muted mb-0">Пока нет сообщений.</p>
+        {% endif %}
+      </div>
+
+      {# Форма отправки сообщения #}
+      <form method="post" enctype="multipart/form-data" class="mt-2" id="internal-message-form">
+        {% csrf_token %}
+
+        <div class="mb-2">
+          <label for="id_html_text" class="form-label mb-1">Сообщение</label>
+          <textarea name="html_text"
+                    id="id_html_text"
+                    class="form-control"
+                    rows="4"
+                    placeholder="Ваше сообщение сотруднику"></textarea>
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label mb-1 d-block">Вложения</label>
+          <label class="btn btn-outline-secondary mb-0" title="Прикрепить файлы">
+            📎
+            <input type="file" id="internal-attachments-input" name="attachments" multiple hidden>
+          </label>
+          <div id="internal-attachments-list" class="mt-1 small"></div>
+        </div>
+
+        <div class="text-end">
+          <button type="submit" class="btn btn-primary">Отправить</button>
+        </div>
+      </form>
+    {% else %}
+      <p class="text-muted">Выберите сотрудника слева, чтобы начать диалог.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script src="{% static 'crm/tinymce/tinymce.min.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // TinyMCE как в email
+  if (typeof tinymce !== 'undefined') {
+    tinymce.init({
+      selector: 'textarea[name="html_text"]',
+      menubar: false,
+      statusbar: false,
+      plugins: 'lists link image autoresize',
+      toolbar: 'undo redo | bold italic underline | bullist numlist | link image | removeformat',
+      branding: false,
+      height: 200,
+      license_key: 'gpl',
+      setup: function (editor) {
+        editor.on('change', function () {
+          editor.save();
+        });
+      }
+    });
+  }
+
+  // Автопрокрутка диалога вниз
+  var dlg = document.getElementById('imDialog');
+  if (dlg) {
+    dlg.scrollTop = dlg.scrollHeight;
+  }
+
+  // Вложения: выбор и удаление до отправки
+  (function () {
+    const input = document.getElementById('internal-attachments-input');
+    const listContainer = document.getElementById('internal-attachments-list');
+
+    if (!input || !listContainer) return;
+
+    let attachedFiles = [];
+
+    input.addEventListener('change', function (event) {
+      const files = Array.from(event.target.files);
+      if (!files.length) return;
+
+      attachedFiles = attachedFiles.concat(files);
+      input.value = "";
+      renderFileList();
+    });
+
+    function renderFileList() {
+      listContainer.innerHTML = "";
+      if (!attachedFiles.length) return;
+      const ul = document.createElement('ul');
+      ul.className = "list-unstyled mb-0";
+      attachedFiles.forEach((file, index) => {
+        const li = document.createElement('li');
+        li.className = "d-flex justify-content-between align-items-center mb-1";
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = file.name;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = "button";
+        removeBtn.className = "btn btn-sm btn-outline-danger ms-2";
+        removeBtn.textContent = "✕";
+        removeBtn.title = "Удалить из вложений";
+        removeBtn.addEventListener('click', function () {
+          attachedFiles.splice(index, 1);
+          renderFileList();
+        });
+        li.appendChild(nameSpan);
+        li.appendChild(removeBtn);
+        ul.appendChild(li);
+      });
+      listContainer.appendChild(ul);
+    }
+
+    // Перед отправкой подменяем input.files "нашими" attachedFiles
+    const form = document.getElementById('internal-message-form');
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        // если мы ничего вручную не меняли — браузер сам отправит files;
+        // если attachedFiles непустой — нужно создать DataTransfer
+        if (attachedFiles.length) {
+          const dt = new DataTransfer();
+          attachedFiles.forEach(f => dt.items.add(f));
+          input.files = dt.files;
+        }
+      });
+    }
+  })();
+});
+</script>
+{% endblock %}

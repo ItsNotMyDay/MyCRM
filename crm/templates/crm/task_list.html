@@ -1,0 +1,300 @@
+{% extends "crm/base.html" %}
+
+{% block title %}Задачи{% endblock %}
+
+{% block content %}
+<h1>Задачи</h1>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <form method="get" class="row g-3">
+    <div class="col-auto">
+      <label class="form-label">Статус</label>
+      <select name="status" class="form-select" onchange="this.form.submit()">
+        <option value="">Все</option>
+        <option value="PLANNED" {% if status == 'PLANNED' %}selected{% endif %}>Запланированные</option>
+        <option value="DONE" {% if status == 'DONE' %}selected{% endif %}>Выполненные</option>
+      </select>
+    </div>
+
+    <div class="col-auto">
+      <label class="form-label">Период</label>
+      <select name="period" class="form-select" onchange="this.form.submit()">
+        <option value="today" {% if period == 'today' %}selected{% endif %}>Сегодня</option>
+        <option value="week" {% if period == 'week' %}selected{% endif %}>Ближайшая неделя</option>
+        <option value="overdue" {% if period == 'overdue' %}selected{% endif %}>Просроченные</option>
+        <option value="all" {% if period == 'all' %}selected{% endif %}>Все</option>
+      </select>
+    </div>
+  </form>
+
+  {% if is_superuser %}
+    <button type="button"
+            class="btn btn-success"
+            data-bs-toggle="modal"
+            data-bs-target="#bulkTasksModal">
+      Поставить задачи
+    </button>
+  {% endif %}
+</div>
+
+<table class="table table-striped align-middle">
+  <thead>
+    <tr>
+      <th>Когда</th>
+      <th>Клиент</th>
+      <th>Тип</th>
+      <th>Комментарий</th>
+      <th>Статус</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for task in tasks %}
+      <tr
+        {% if task.status == 'PLANNED' and task.planned_at < now %}
+          class="table-danger"
+        {% elif task.status == 'PLANNED' %}
+          class="table-warning"
+        {% elif task.status == 'DONE' %}
+          class="table-success"
+        {% endif %}
+      >
+        <td>{{ task.planned_at }}</td>
+        <td>
+          <a href="{% url 'crm:client_detail' task.client.id %}">
+            {{ task.client.full_name }}
+          </a>
+        </td>
+        <td>{{ task.get_task_type_display }}</td>
+        <td>{{ task.comment }}</td>
+        <td>
+          {% if task.status == 'PLANNED' %}
+  <form method="post" action="{% url 'crm:task_list' %}" style="display:inline;">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="complete_task_from_list">
+    <input type="hidden" name="task_id" value="{{ task.id }}">
+    <button type="submit" class="btn btn-sm btn-outline-success">Выполнено</button>
+  </form>
+{% endif %}
+        </td>
+      </tr>
+    {% empty %}
+      <tr>
+        <td colspan="6">Задач не найдено.</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+
+
+{% if is_superuser %}
+{# Модальное окно массовой постановки задач (остаётся как в текущей реализации с AJAX-фильтрами) #}
+<div class="modal fade" id="bulkTasksModal" tabindex="-1" aria-labelledby="bulkTasksModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bulkTasksModalLabel">Массовая постановка задач</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body">
+
+        <form method="post" id="bulkTasksForm">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="bulk_create_tasks">
+
+          <div class="border rounded p-3 mb-3">
+            <h6>Параметры задачи</h6>
+            <div class="row g-3 align-items-end">
+              <div class="col-md-3">
+                <label class="form-label" for="bulk_task_type">Тип задачи</label>
+                <select class="form-select" id="bulk_task_type" name="task_type">
+                  <option value="CALL">Звонок</option>
+                  <option value="EMAIL">Письмо</option>
+                  <option value="MESSAGE">Сообщение</option>
+                  <option value="MEETING">Встреча</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" for="bulk_planned_at">Дата и время</label>
+                <input type="datetime-local" class="form-control" id="bulk_planned_at" name="planned_at" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="bulk_comment">Комментарий</label>
+                <input type="text" class="form-control" id="bulk_comment" name="comment" maxlength="255">
+              </div>
+            </div>
+          </div>
+
+          <div class="border rounded p-3">
+            <h6>Выбор клиентов</h6>
+
+            <div class="row g-2 mb-2" id="bulkFilters">
+              <div class="col-md-3">
+                <label class="form-label">Тип клиента</label>
+                <select class="form-select form-select-sm" id="filter_client_type">
+                  <option value="">Все</option>
+                  <option value="BUYER">Покупатель</option>
+                  <option value="BUILDER">Строитель</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Этап воронки</label>
+                <select class="form-select form-select-sm" id="filter_pipeline_stage">
+                  <option value="">Все</option>
+                  {% for code, label in pipeline_stages_for_filter %}
+                    <option value="{{ code }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Ответственный менеджер</label>
+                <select class="form-select form-select-sm" id="filter_manager">
+                  <option value="">Все</option>
+                  {% for m in managers %}
+                    <option value="{{ m.id }}">{{ m.get_full_name|default:m.username }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Поиск</label>
+                <input type="text"
+                       class="form-control form-control-sm"
+                       id="filter_query"
+                       placeholder="ФИО, телефон, email">
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-between mb-2">
+              <div>
+                <button type="button" class="btn btn-sm btn-link" id="selectAllClientsBtn">Выделить всех</button>
+                <button type="button" class="btn btn-sm btn-link" id="unselectAllClientsBtn">Снять выделение</button>
+              </div>
+              <div class="text-muted small" id="clientsCountLabel">
+                Показано клиентов: {{ clients_for_modal|length }}
+              </div>
+            </div>
+
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+              <table class="table table-sm table-striped align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;"></th>
+                    <th>ФИО</th>
+                    <th>Телефон</th>
+                    <th>Email</th>
+                    <th>Тип</th>
+                    <th>Ответственный</th>
+                    <th>Этап воронки</th>
+                  </tr>
+                </thead>
+                <tbody id="bulkClientsTbody">
+                  {% include "crm/partials/bulk_clients_tbody.html" with clients_for_modal=clients_for_modal %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </form>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+        <button type="submit" form="bulkTasksForm" class="btn btn-primary">
+          Создать задачи выбранным клиентам
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+{% if is_superuser %}
+<script>
+(function() {
+  const tbody = document.getElementById('bulkClientsTbody');
+  const countLabel = document.getElementById('clientsCountLabel');
+  const selectAllBtn = document.getElementById('selectAllClientsBtn');
+  const unselectAllBtn = document.getElementById('unselectAllClientsBtn');
+
+  function setAllClients(checked) {
+    if (!tbody) return;
+    tbody.querySelectorAll('.client-checkbox').forEach(cb => cb.checked = checked);
+  }
+
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      setAllClients(true);
+    });
+  }
+  if (unselectAllBtn) {
+    unselectAllBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      setAllClients(false);
+    });
+  }
+
+  // AJAX-фильтры для модального окна
+  const clientTypeSel = document.getElementById('filter_client_type');
+  const stageSel = document.getElementById('filter_pipeline_stage');
+  const managerSel = document.getElementById('filter_manager');
+  const queryInput = document.getElementById('filter_query');
+
+  function applyFilters() {
+    const params = new URLSearchParams();
+    if (clientTypeSel && clientTypeSel.value) params.append('f_client_type', clientTypeSel.value);
+    if (stageSel && stageSel.value) params.append('f_pipeline_stage', stageSel.value);
+    if (managerSel && managerSel.value) params.append('f_manager', managerSel.value);
+    if (queryInput && queryInput.value.trim()) params.append('f_q', queryInput.value.trim());
+
+    fetch("{% url 'crm:bulk_clients' %}?" + params.toString(), {
+      headers: {'X-Requested-With': 'XMLHttpRequest'}
+    })
+    .then(resp => resp.json())
+    .then(data => {
+      if (data.clients_tbody_html !== undefined) {
+        tbody.innerHTML = data.clients_tbody_html;
+        if (countLabel) {
+          const rows = tbody.querySelectorAll('tr');
+          let count = 0;
+          rows.forEach(r => {
+            if (r.querySelector('.client-checkbox')) count++;
+          });
+          countLabel.textContent = 'Показано клиентов: ' + count;
+        }
+      }
+      if (data.stages_options_html !== undefined && stageSel) {
+        stageSel.innerHTML = data.stages_options_html;
+      }
+    })
+    .catch(err => console.error('Bulk clients filter error', err));
+  }
+
+  if (clientTypeSel) {
+    clientTypeSel.addEventListener('change', function() {
+      if (stageSel) stageSel.value = '';
+      applyFilters();
+    });
+  }
+  if (stageSel) {
+    stageSel.addEventListener('change', applyFilters);
+  }
+  if (managerSel) {
+    managerSel.addEventListener('change', applyFilters);
+  }
+  if (queryInput) {
+    queryInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyFilters();
+      }
+    });
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}

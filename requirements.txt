@@ -1,0 +1,45 @@
+aiolimiter==1.1.1
+anyio==4.13.0
+APScheduler==3.10.4
+asgiref==3.11.1
+beautifulsoup4==4.14.3
+cachetools==5.5.2
+certifi==2026.4.22
+cffi==2.0.0
+charset-normalizer==3.4.7
+colorama==0.4.6
+cryptography==48.0.0
+<<<<<<< HEAD
+Django==6.0.5
+=======
+Django==5.2.14
+>>>>>>> 229eae0c452e3c775296efb7c0451094cdf6cd51
+gunicorn==26.0.0
+h11==0.16.0
+h2==4.3.0
+hpack==4.1.0
+httpcore==1.0.9
+httpx==0.28.1
+hyperframe==6.1.0
+idna==3.13
+packaging==26.2
+pillow==12.2.0
+<<<<<<< HEAD
+psycopg2-binary==2.9.12
+=======
+>>>>>>> 229eae0c452e3c775296efb7c0451094cdf6cd51
+pycparser==3.0
+PySocks==1.7.1
+python-telegram-bot==21.5
+pytz==2026.2
+qrcode==8.2
+requests==2.33.1
+six==1.17.0
+socksio==1.0.0
+soupsieve==2.8.3
+sqlparse==0.5.5
+tornado==6.5.5
+typing_extensions==4.15.0
+tzdata==2026.2
+tzlocal==5.3.1
+urllib3==2.7.0

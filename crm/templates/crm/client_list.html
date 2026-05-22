@@ -1,0 +1,131 @@
+{% extends "crm/base.html" %}
+
+{% block title %}Клиенты{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="mb-0">Клиенты</h1>
+  <a href="{% url 'crm:client_create' %}" class="btn btn-primary btn-sm">
+    Создать нового клиента
+  </a>
+</div>
+
+<form method="get" class="row g-3 mb-3">
+  <div class="col-md-3 col-sm-6">
+    <label class="form-label">Поиск</label>
+    <input type="text" name="q" value="{{ query|default_if_none:'' }}" class="form-control"
+           placeholder="ФИО или телефон"
+           onblur="this.form.submit()">
+  </div>
+
+  {% if managers %}
+  <div class="col-md-3 col-sm-6">
+    <label class="form-label">Ответственный</label>
+    <select name="manager" class="form-select" onchange="this.form.submit()">
+      <option value="">Все</option>
+      {% for m in managers %}
+        <option value="{{ m.id }}" {% if manager_id|default_if_none:'' == m.id|stringformat:'s' %}selected{% endif %}>
+          {{ m.username }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="col-md-3 col-sm-6">
+    <label class="form-label">Тип клиента</label>
+    <select name="client_type" class="form-select" onchange="this.form.submit()">
+      <option value="">Все</option>
+      <option value="BUYER" {% if client_type == 'BUYER' %}selected{% endif %}>Покупатель</option>
+      <option value="BUILDER" {% if client_type == 'BUILDER' %}selected{% endif %}>Строитель</option>
+    </select>
+  </div>
+
+ <div class="col-md-3 col-sm-6">
+  <label class="form-label">Этап воронки</label>
+  <select name="pipeline_stage" class="form-select" onchange="this.form.submit()">
+    <option value="">Все</option>
+    {% for code, label in pipeline_stages %}
+      <option value="{{ code }}" {% if pipeline_stage == code %}selected{% endif %}>
+        {{ label }}
+      </option>
+    {% endfor %}
+  </select>
+</div>
+</form>
+
+<table class="table table-striped align-middle">
+  <thead>
+    <tr>
+      <th>ФИО</th>
+      <th>Телефон</th>
+      <th>Тип клиента</th>
+      <th>Этап воронки</th>
+      <th>Ответственный</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for client in clients %}
+      <tr>
+        <td>
+          <a href="{% url 'crm:client_detail' client.id %}">{{ client.full_name }}</a>
+        </td>
+        <td>{{ client.phone }}</td>
+        <td>
+          {% if client.client_type == 'BUYER' %}
+            Покупатель
+          {% elif client.client_type == 'BUILDER' %}
+            Строитель
+          {% else %}
+            -
+          {% endif %}
+        </td>
+        <td>
+          {% if client.client_type == 'BUILDER' %}
+            {% if client.pipeline_stage == 'BU_COLD' %}
+              Холодный контакт
+            {% elif client.pipeline_stage == 'BU_CONTACT' %}
+              Контакт
+            {% elif client.pipeline_stage == 'BU_TASKS' %}
+              Выявление задач
+            {% elif client.pipeline_stage == 'BU_KP' %}
+              КП
+            {% elif client.pipeline_stage == 'BU_FIRST_CONTRACT' %}
+              Первый договор
+            {% elif client.pipeline_stage == 'BU_SUPPORT' %}
+              Сопровождение и удержание
+            {% else %}
+              -
+            {% endif %}
+          {% else %}
+            {% if client.pipeline_stage == 'B_COLD' %}
+              Холодный контакт
+            {% elif client.pipeline_stage == 'B_NEEDS' %}
+              Выявление потребности
+            {% elif client.pipeline_stage == 'B_OFFER' %}
+              Предложение
+            {% elif client.pipeline_stage == 'B_PAYMENT' %}
+              Оплата
+            {% elif client.pipeline_stage == 'B_DELIVERY' %}
+              Исполнение
+            {% else %}
+              -
+            {% endif %}
+          {% endif %}
+        </td>
+        <td>{{ client.responsible|default_if_none:"-" }}</td>
+        <td>
+          <a href="{% url 'crm:client_detail' client.id %}" class="btn btn-sm btn-outline-primary">
+            Открыть
+          </a>
+        </td>
+      </tr>
+    {% empty %}
+      <tr>
+        <td colspan="6" class="text-center text-muted">Клиенты не найдены.</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

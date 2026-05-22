@@ -1,0 +1,223 @@
+{% extends "crm/base.html" %}
+{% load static %}
+
+{% block title %}Рассылка{% endblock %}
+
+{% block content %}
+<h1 class="mb-3">Рассылка по клиентам</h1>
+
+<div class="row">
+  <div class="col-md-12">
+
+    <!-- Фильтры (для суперпользователя) и поиск -->
+    <form method="get" class="row g-2 align-items-end mb-3">
+      <div class="col-12 col-md-4">
+        <label class="form-label mb-1">Поиск по имени / email / телефону</label>
+        <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Введите запрос">
+      </div>
+
+      {% if managers %}
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1">Ответственный менеджер</label>
+        <select name="manager" class="form-select">
+          <option value="">Все</option>
+          {% for m in managers %}
+            <option value="{{ m.id }}" {% if manager_id|default_if_none:'' == m.id|stringformat:"s" %}selected{% endif %}>
+              {{ m.username }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+
+      <div class="col-12 col-md-2">
+        <button type="submit" class="btn btn-outline-primary w-100">Применить</button>
+      </div>
+    </form>
+
+    <div class="card">
+      <div class="card-header">
+        Настройка рассылки
+      </div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="send_bulk_mail">
+
+          <!-- Тема + вложения и отправка (горизонтально) -->
+          <div class="row g-2 align-items-end mb-3">
+            <div class="col-12 col-md-9">
+              <label class="form-label mb-1">Тема</label>
+              <input type="text" name="email_subject" class="form-control" placeholder="Тема письма">
+            </div>
+            <div class="col-12 col-md-3 text-end">
+              <label class="form-label mb-1 d-block">Вложения и отправка</label>
+              <div class="d-flex justify-content-end">
+                <label class="btn btn-outline-secondary me-2 mb-0" title="Прикрепить файлы">
+                  📎
+                  <input type="file" name="attachments" id="bulk-attachments-input" multiple hidden>
+                </label>
+                <button type="submit" class="btn btn-primary" title="Отправить рассылку">
+                  Отправить
+                </button>
+              </div>
+              <div id="bulk-attachments-list" class="mt-1 small"></div>
+            </div>
+          </div>
+
+          <!-- Тело письма -->
+          <div class="mb-3">
+            <label class="form-label mb-1">Сообщение</label>
+            <textarea name="email_body" class="form-control" rows="6"
+                      placeholder="Текст рассылки (подпись менеджера будет добавлена автоматически)"></textarea>
+          </div>
+
+          <!-- Список клиентов с чекбоксами -->
+          <div class="mb-2 d-flex justify-content-between align-items-center">
+            <strong>Выберите клиентов для рассылки</strong>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="select-all-clients">
+              <label class="form-check-label" for="select-all-clients">
+                Выбрать всех
+              </label>
+            </div>
+          </div>
+
+          <div class="table-responsive" style="max-height: 350px; overflow-y:auto;">
+            <table class="table table-sm align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:40px;"></th>
+                  <th>Клиент</th>
+                  <th>Email</th>
+                  <th>Телефон</th>
+                  <th>Ответственный</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for c in clients %}
+                  <tr>
+                    <td>
+                      {% if c.email %}
+                        <input type="checkbox" name="client_ids" value="{{ c.id }}" class="client-checkbox">
+                      {% else %}
+                        <span class="text-muted" title="У клиента нет email">—</span>
+                      {% endif %}
+                    </td>
+                    <td>{{ c.full_name }}</td>
+                    <td>{{ c.email|default:"-" }}</td>
+                    <td>{{ c.phone|default:"-" }}</td>
+                    <td>{{ c.responsible|default:"-" }}</td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="5" class="text-center text-muted">
+                      Клиенты не найдены.
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <small class="text-muted d-block mt-2">
+            Письмо будет отправлено только клиентам, у которых указан email.
+            Для каждого клиента создаётся отдельное письмо и запись в его истории писем.
+          </small>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'crm/tinymce/tinymce.min.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // TinyMCE для тела рассылки
+  if (typeof tinymce !== 'undefined') {
+    tinymce.init({
+      selector: 'textarea[name="email_body"]',
+      menubar: false,
+      statusbar: false,
+      plugins: 'lists link image autoresize',
+      toolbar: 'undo redo | bold italic underline | bullist numlist | link image | removeformat',
+      branding: false,
+      height: 250,
+      license_key: 'gpl',
+      setup: function (editor) {
+        editor.on('change', function () {
+          editor.save();
+        });
+      }
+    });
+  }
+
+  // "Выбрать всех" для чекбоксов клиентов
+  const selectAll = document.getElementById('select-all-clients');
+  const clientCheckboxes = document.querySelectorAll('.client-checkbox');
+  if (selectAll && clientCheckboxes.length) {
+    selectAll.addEventListener('change', function () {
+      clientCheckboxes.forEach(cb => { cb.checked = selectAll.checked; });
+    });
+  }
+
+  // Логика вложений
+  const input = document.getElementById('bulk-attachments-input');
+  const listContainer = document.getElementById('bulk-attachments-list');
+  let attachedFiles = [];
+
+  if (input && listContainer) {
+    input.addEventListener('change', function (event) {
+      const files = Array.from(event.target.files);
+      if (!files.length) return;
+
+      attachedFiles = attachedFiles.concat(files);
+      input.value = "";
+      renderFileList();
+    });
+
+    function renderFileList() {
+      listContainer.innerHTML = "";
+      if (!attachedFiles.length) return;
+      const ul = document.createElement('ul');
+      ul.className = "list-unstyled mb-0";
+      attachedFiles.forEach((file, index) => {
+        const li = document.createElement('li');
+        li.className = "d-flex justify-content-between align-items-center mb-1";
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = file.name;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = "button";
+        removeBtn.className = "btn btn-sm btn-outline-danger ms-2";
+        removeBtn.textContent = "✕";
+        removeBtn.title = "Удалить из вложений";
+        removeBtn.addEventListener('click', function () {
+          attachedFiles.splice(index, 1);
+          renderFileList();
+        });
+        li.appendChild(nameSpan);
+        li.appendChild(removeBtn);
+        ul.appendChild(li);
+      });
+      listContainer.appendChild(ul);
+    }
+
+    // На submit формы подставим файлы вручную
+    const form = input.closest('form');
+    if (form) {
+      form.addEventListener('submit', function (event) {
+        if (!attachedFiles.length) {
+          return; // просто отправляем обычным способом
+        }
+        // Перехватывать и отправлять fetch здесь не обязательно,
+        // т.к. Django сам прочитает input[name="attachments"].
+        // Но если хочешь полностью контролировать — можно повторить логику из client_detail.
+      });
+    }
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "crm/base.html" %}
+
+{% block title %}Импорт звонков UIS{% endblock %}
+
+{% block content %}
+<h1 class="mb-3">Импорт звонков из UIS</h1>
+
+<p class="text-muted">
+  Загрузите CSV/Excel-файл, экспортированный из UIS. Ожидаются колонки:
+  <code>Статус; Тип; Дата и время; Номер абонента; Длительность звонка; Длительность ожидания ответа; Сотрудник</code>.
+</p>
+
+<form method="post" enctype="multipart/form-data" class="card p-3">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label for="id_file" class="form-label">Файл отчёта UIS (CSV)</label>
+    <input type="file" name="file" id="id_file" class="form-control" accept=".csv,.txt,.xls,.xlsx">
+  </div>
+  <button type="submit" class="btn btn-primary">Импортировать</button>
+  <a href="{% url 'crm:dashboard' %}" class="btn btn-secondary ms-2">Отмена</a>
+</form>
+{% endblock %}

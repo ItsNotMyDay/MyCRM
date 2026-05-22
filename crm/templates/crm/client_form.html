@@ -1,0 +1,89 @@
+{% extends "crm/base.html" %}
+
+{% block title %}{% if client %}Редактирование клиента{% else %}Создание клиента{% endif %}{% endblock %}
+
+{% block content %}
+<h1>{% if client %}Редактирование клиента{% else %}Создание клиента{% endif %}</h1>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.full_name.id_for_label }}">ФИО</label>
+    {{ form.full_name }}
+    {% if form.full_name.errors %}
+      <div class="text-danger small">{{ form.full_name.errors }}</div>
+    {% endif %}
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.phone.id_for_label }}">Телефон</label>
+    {{ form.phone }}
+    {% if form.phone.errors %}
+      <div class="text-danger small">{{ form.phone.errors }}</div>
+    {% endif %}
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.email.id_for_label }}">Email</label>
+    {{ form.email }}
+    {% if form.email.errors %}
+      <div class="text-danger small">{{ form.email.errors }}</div>
+    {% endif %}
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.telegram.id_for_label }}">Telegram</label>
+    {{ form.telegram }}
+    {% if form.telegram.errors %}
+      <div class="text-danger small">{{ form.telegram.errors }}</div>
+    {% endif %}
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.whatsapp.id_for_label }}">WhatsApp</label>
+    {{ form.whatsapp }}
+    {% if form.whatsapp.errors %}
+      <div class="text-danger small">{{ form.whatsapp.errors }}</div>
+    {% endif %}
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.client_type.id_for_label }}">Тип клиента</label>
+    {{ form.client_type }}
+    {% if form.client_type.errors %}
+      <div class="text-danger small">{{ form.client_type.errors }}</div>
+    {% endif %}
+  </div>
+
+  <hr>
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.source.id_for_label }}">Источник</label>
+    {{ form.source }}
+    {% if form.source.errors %}
+      <div class="text-danger small">{{ form.source.errors }}</div>
+    {% endif %}
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label" for "{{ form.request_text.id_for_label }}">Запрос</label>
+    {{ form.request_text }}
+    {% if form.request_text.errors %}
+      <div class="text-danger small">{{ form.request_text.errors }}</div>
+    {% endif %}
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.first_note.id_for_label }}">Примечание</label>
+    {{ form.first_note }}
+    {% if form.first_note.errors %}
+      <div class="text-danger small">{{ form.first_note.errors }}</div>
+    {% endif %}
+  </div>
+
+  <button type="submit" class="btn btn-primary">
+    {% if client %}Сохранить{% else %}Создать{% endif %}
+  </button>
+  <a href="{% url 'crm:client_list' %}" class="btn btn-secondary ms-2">Отмена</a>
+</form>
+{% endblock %}

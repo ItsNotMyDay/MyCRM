@@ -1,0 +1,97 @@
+{% extends "crm/base.html" %}
+
+{% block title %}Главная{% endblock %}
+
+{% block content %}
+<h1>Главная</h1>
+
+{# БЛОК УВЕДОМЛЕНИЙ #}
+{% if notifications %}
+  <div class="mb-4">
+    <h3>Новые события</h3>
+    <ul class="list-group">
+      {% for n in notifications %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            {% if n.type == 'EMAIL' %}
+              <span class="badge bg-secondary me-2">Письмо</span>
+            {% elif n.type == 'TRANSFER' %}
+              <span class="badge bg-warning text-dark me-2">Передача клиента</span>
+            {% endif %}
+
+            {{ n.message }}
+
+            {% if n.client %}
+              <br>
+              <a href="{% url 'crm:client_detail' n.client.id %}">
+                Открыть клиента
+              </a>
+            {% endif %}
+          </div>
+          <small class="text-muted">{{ n.created_at }}</small>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<div class="row mb-4">
+  <div class="col-md-4">
+    <a href="{% url 'crm:client_list' %}" class="text-decoration-none">
+      <div class="card text-bg-primary mb-3">
+        <div class="card-body">
+          <h5 class="card-title text-light">Мои клиенты</h5>
+          <p class="card-text display-6 text-light">{{ my_clients_count }}</p>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="{% url 'crm:task_list' %}?status=PLANNED&period=overdue" class="text-decoration-none">
+      <div class="card text-bg-danger mb-3">
+        <div class="card-body">
+          <h5 class="card-title text-light">Просроченные задачи</h5>
+          <p class="card-text display-6 text-light">{{ overdue_count }}</p>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="{% url 'crm:task_list' %}?status=PLANNED&period=today" class="text-decoration-none">
+      <div class="card text-bg-warning mb-3">
+        <div class="card-body">
+          <h5 class="card-title text-dark">Задачи на сегодня</h5>
+          <p class="card-text display-6 text-dark">{{ today_count }}</p>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<h3>Ближайшие задачи</h3>
+{% if upcoming_tasks %}
+  <ul class="list-group">
+    {% for task in upcoming_tasks %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <strong>{{ task.planned_at }}</strong> —
+          <a href="{% url 'crm:client_detail' task.client.id %}">
+            {{ task.client.full_name }}
+          </a>
+          {% if task.comment %}
+            <br><small class="text-muted">{{ task.comment }}</small>
+          {% endif %}
+        </div>
+        <form method="post" action="{% url 'crm:client_detail' task.client.id %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="complete_task">
+          <input type="hidden" name="task_id" value="{{ task.id }}">
+          <button type="submit" class="btn btn-sm btn-outline-success">Выполнено</button>
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p>Ближайших задач нет.</p>
+{% endif %}
+{% endblock %}

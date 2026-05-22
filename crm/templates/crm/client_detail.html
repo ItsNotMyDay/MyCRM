@@ -1,0 +1,1389 @@
+{% extends "crm/base.html" %}
+{% load static %}
+
+{% block title %}Клиент {{ client.full_name }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+  <!-- Воронка -->
+  <div class="mb-2 d-flex flex-wrap gap-2">
+    {% for code, label in pipeline %}
+      <form method="post" class="d-inline">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_pipeline_stage">
+        <input type="hidden" name="pipeline_stage" value="{{ code }}">
+        <button type="submit"
+                class="btn btn-sm
+                  {% if forloop.counter0 == 0 %}btn-info
+                  {% elif forloop.counter0 == 1 %}btn-primary
+                  {% elif forloop.counter0 == 2 %}btn-warning
+                  {% elif forloop.counter0 == 3 %}btn-warning
+                  {% else %}btn-danger{% endif %}
+                  {% if client.pipeline_stage == code %} border border-3 border-dark{% endif %}">
+          {{ label }}
+        </button>
+      </form>
+    {% endfor %}
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center">
+    <div class="d-flex align-items-center flex-wrap gap-2">
+      <h1 class="mb-0">{{ client.full_name }}</h1>
+      <!-- Тип клиента -->
+      <form method="post" class="ms-2">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_client_type">
+        <select name="client_type" class="form-select form-select-sm d-inline-block w-auto"
+                onchange="this.form.submit()">
+          <option value="BUYER" {% if client.client_type == 'BUYER' %}selected{% endif %}>Покупатель</option>
+          <option value="BUILDER" {% if client.client_type == 'BUILDER' %}selected{% endif %}>Строитель</option>
+        </select>
+      </form>
+    </div>
+    <div>
+      <a href="{% url 'crm:client_edit' client.id %}" class="btn btn-outline-primary btn-sm me-2">
+        Редактировать
+      </a>
+      <a href="{% url 'crm:client_list' %}" class="btn btn-outline-secondary btn-sm">
+        К списку клиентов
+      </a>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <!-- Левая колонка: задачи, заметки, вкладки -->
+  <div class="col-md-8 mb-4">
+
+    <div class="row">
+
+      <!-- Заметки клиента -->
+      <div class="col-12 mb-3">
+        <div class="card h-100">
+          <div class="card-header">
+            Заметки
+          </div>
+          <div class="card-body p-0">
+            {% if client_notes %}
+              <ul class="list-group list-group-flush mb-0">
+                {% for note in client_notes %}
+                  <li class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                      <div>
+                        {% if note.pinned %}
+                          <span class="badge bg-info text-dark me-1">Закреплено</span>
+                        {% endif %}
+                        <div class="small text-muted">
+                          {{ note.author|default:"Система" }} • {{ note.created_at }}
+                        </div>
+                        <div class="mt-1">
+                          {{ note.text|linebreaksbr }}
+                        </div>
+                      </div>
+                      <div class="ms-2 text-end">
+                        <form method="post" action="{% url 'crm:note_toggle_pin' client.id note.id %}" class="mb-1">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-sm btn-outline-secondary">
+                            {% if note.pinned %}Открепить{% else %}Закрепить{% endif %}
+                          </button>
+                        </form>
+                        <a href="{% url 'crm:note_edit' client.id note.id %}"
+                           class="btn btn-sm btn-outline-primary mb-1">
+                          Редактировать
+                        </a>
+                        <form method="post" action="{% url 'crm:note_delete' client.id note.id %}">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-sm btn-outline-danger"
+                                  onclick="return confirm('Удалить заметку?');">
+                            Удалить
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="text-muted m-3 mb-0">Заметок пока нет.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Добавить заметку -->
+      <div class="col-12 mb-3">
+        <div class="card h-100">
+          <div class="card-header">
+            Добавить заметку
+          </div>
+          <div class="card-body">
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="add_note">
+              <div class="mb-3">
+                <label class="form-label">Текст</label>
+                <textarea name="text" class="form-control" rows="3"
+                          placeholder="Текст заметки"></textarea>
+              </div>
+              <button type="submit" class="btn btn-success btn-sm w-100">Сохранить заметку</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Вкладки: Задачи / Общение / История -->
+    <div class="card mt-3">
+      <div class="card-header border-bottom-0 pb-0">
+        <ul class="nav nav-tabs card-header-tabs" id="clientTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tasks-tab" data-bs-toggle="tab"
+                    data-bs-target="#tab-tasks" type="button" role="tab">
+              Задачи
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="comm-tab" data-bs-toggle="tab"
+                    data-bs-target="#tab-comm" type="button" role="tab">
+              Общение
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="history-tab" data-bs-toggle="tab"
+                    data-bs-target="#tab-history" type="button" role="tab">
+              История
+            </button>
+          </li>
+        </ul>
+      </div>
+      <div class="card-body tab-content">
+
+        <!-- TAB: Задачи -->
+        <div class="tab-pane fade show active" id="tab-tasks" role="tabpanel" aria-labelledby="tasks-tab">
+
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="mb-0">Задачи по клиенту</h5>
+            <a href="{% url 'crm:task_list' %}?status=PLANNED&period=all"
+               class="btn btn-sm btn-outline-secondary">
+              Все мои задачи
+            </a>
+          </div>
+          <div class="table-responsive">
+            <table class="table mb-0 table-sm align-middle">
+              <thead>
+                <tr>
+                  <th>Когда</th>
+                  <th>Кому</th>
+                  <th>Тип</th>
+                  <th>Статус</th>
+                  <th>Комментарий</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for task in tasks %}
+                  <tr
+                    {% if task.status == 'PLANNED' and task.planned_at < now %}
+                      class="table-danger"
+                    {% elif task.status == 'PLANNED' %}
+                      class="table-warning"
+                    {% elif task.status == 'DONE' %}
+                      class="table-success"
+                    {% endif %}
+                  >
+                    <td>{{ task.planned_at }}</td>
+                    <td>{{ task.assigned_to }}</td>
+                    <td>{{ task.get_task_type_display }}</td>
+                    <td>
+                      {% if task.status == 'PLANNED' %}
+                        <span class="badge bg-warning text-dark">Запланирован</span>
+                      {% else %}
+                        <span class="badge bg-success">Выполнен</span>
+                      {% endif %}
+                    </td>
+                    <td>{{ task.comment }}</td>
+                    <td>
+                      {% if task.status == 'PLANNED' %}
+                        <form method="post" style="display:inline;">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="complete_task">
+                          <input type="hidden" name="task_id" value="{{ task.id }}">
+                          <button type="submit" class="btn btn-sm btn-outline-success">Выполнено</button>
+                        </form>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="6" class="text-center text-muted">Задач по клиенту нет.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Создать задачу -->
+          <div class="col-12 mb-3 mt-3">
+            <div class="card h-100">
+              <div class="card-header">
+                Создать задачу
+              </div>
+              <div class="card-body">
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="add_task">
+                  <div class="mb-3">
+                    <label class="form-label">Тип задачи</label>
+                    <select name="task_type" class="form-select">
+                      <option value="CALL">Звонок</option>
+                      <option value="EMAIL">Письмо</option>
+                      <option value="MESSAGE">Сообщение</option>
+                      <option value="MEETING">Встреча</option>
+                    </select>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Дата и время</label>
+                    <input type="datetime-local" name="planned_at" class="form-control">
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Комментарий</label>
+                    <input type="text" name="comment" class="form-control" placeholder="Описание задачи, цель">
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-sm w-100">Создать задачу</button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- TAB: Общение -->
+        <div class="tab-pane fade" id="tab-comm" role="tabpanel" aria-labelledby="comm-tab">
+          <!-- Диалог Telegram -->
+          <div class="card">
+            <div class="card-header">
+              Диалог (Telegram)
+            </div>
+            <div class="card-body" id="telegram-dialog-wrapper" style="max-height: 250px; overflow-y: auto;">
+              <div id="telegram-dialog"
+                   data-client-id="{{ client.id }}"
+                   data-last-id="{{ last_dialog_message_id|default:'0' }}">
+                {% if dialog_messages %}
+                  <ul class="list-unstyled mb-2" id="telegram-dialog-list">
+                    {% for msg in dialog_messages %}
+                      <li class="mb-2" data-message-id="{{ msg.id }}">
+                        <div class="d-flex {% if msg.sender == 'CLIENT' %}justify-content-start{% else %}justify-content-end{% endif %}">
+                          <div class="p-2 rounded
+                                      {% if msg.sender == 'CLIENT' %}
+                                        bg-light border
+                                      {% else %}
+                                        bg-primary text-white
+                                      {% endif %}">
+                            <div class="small text-muted">
+                              {% if msg.sender == 'CLIENT' %}
+                                Клиент
+                              {% else %}
+                                Менеджер
+                              {% endif %}
+                              • {{ msg.created_at }}
+                            </div>
+                            <div>{{ msg.text }}</div>
+                          </div>
+                        </div>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <p class="text-muted mb-2" id="telegram-dialog-empty">Сообщений пока нет.</p>
+                  <ul class="list-unstyled mb-2" id="telegram-dialog-list"></ul>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Форма ответа менеджера в Telegram -->
+          <div class="mt-2">
+            <form method="post" id="telegram-reply-form">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="send_telegram_reply">
+              <div class="input-group input-group-sm">
+                <input type="text"
+                       name="telegram_reply_text"
+                       id="telegram-reply-text"
+                       class="form-control"
+                       placeholder="Ответить клиенту в Telegram">
+                <button class="btn btn-primary" type="submit">Отправить</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Письма клиента (Email) -->
+          <div class="card mb-3 mt-3">
+            <div class="card-header">
+              Письма клиента (Email)
+            </div>
+            <div class="card-body border-bottom">
+              {% if client.email or extra_contacts %}
+                <form method="post" enctype="multipart/form-data" id="client-email-form">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="send_email_reply">
+
+                  <div class="mb-2">
+                    <label class="form-label mb-1">Получатель (email)</label>
+                    <select name="email_to" class="form-select form-select-sm">
+                      {% if client.email %}
+                        <option value="{{ client.email }}" selected>
+                          {{ client.email }}{% if client.full_name %} — основной{% endif %}
+                        </option>
+                      {% endif %}
+                      {% for c in extra_contacts %}
+                        {% if c.contact_type == 'EMAIL' %}
+                          <option value="{{ c.value }}">
+                            {{ c.value }}{% if c.comment %} — {{ c.comment }}{% else %} (доп.){% endif %}
+                          </option>
+                        {% endif %}
+                      {% endfor %}
+                    </select>
+                  </div>
+
+                  <div class="mb-2">
+                    <label class="form-label mb-1">Тема</label>
+                    <input type="text" name="email_subject" class="form-control" placeholder="Тема письма">
+                  </div>
+
+                  <div class="mb-2">
+                    <label class="form-label mb-1 d-block">Вложения</label>
+                    <div>
+                      <label class="btn btn-outline-secondary mb-0" title="Прикрепить файлы">
+                        📎
+                        <input type="file" id="email-attachments-input" name="attachments" multiple hidden>
+                      </label>
+                    </div>
+                    <div id="email-attachments-list" class="mt-1 small"></div>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label mb-1">Сообщение</label>
+                    <textarea name="email_body" class="form-control" rows="4"
+                              placeholder="Ваш ответ клиенту"></textarea>
+                  </div>
+
+                  <div class="text-end">
+                    <button type="submit" class="btn btn-primary" title="Отправить">
+                      Отправить
+                    </button>
+                  </div>
+                </form>
+                <small class="text-muted d-block mt-2">
+                  По умолчанию выбрана основная почта клиента{% if client.email %}: {{ client.email }}{% endif %}.
+                </small>
+              {% else %}
+                <p class="text-muted mb-0">У клиента не указан ни один email, отправка письма недоступна.</p>
+              {% endif %}
+            </div>
+
+            <div class="card-body p-0" style="max-height: 250px; overflow-y: auto;">
+              {% if emails %}
+                <ul class="list-group list-group-flush mb-0" id="emails-list"
+                    data-last-email-id="{{ emails.0.id }}">
+                  {% for email in emails %}
+                    <li class="list-group-item" data-email-id="{{ email.id }}">
+                      <div class="d-flex justify-content_between">
+                        <div>
+                          {% if email.direction == 'OUT' %}
+                            <span class="badge bg-primary me-1">Исходящее</span>
+                          {% else %}
+                            <span class="badge bg-secondary me-1">Входящее</span>
+                          {% endif %}
+                          <strong>{{ email.subject|default:"(без темы)" }}</strong><br>
+                          <small class="text-muted">От: {{ email.from_address }}</small>
+                        </div>
+                        <small class="text-muted">
+                          {{ email.received_at }}
+                        </small>
+                      </div>
+                      <div class="mt-2">
+                        {{ email.body|safe }}
+                      </div>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="text-muted m-3" id="emails-empty">Писем от клиента пока нет.</p>
+                <ul class="list-group list-group-flush mb-0" id="emails-list"></ul>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Логи звонков -->
+          <div class="card mb-3">
+            <div class="card-header">
+              Логи звонков
+            </div>
+            <div class="card-body p-0" style="max-height: 250px; overflow-y: auto;">
+              {% if calls %}
+                <ul class="list-group list-group-flush">
+                  {% for c in calls %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                      <div>
+                        <strong>
+                          {% if c.call_type == 'OUT' %}Исходящий{% else %}Входящий{% endif %}
+                        </strong>
+                        <span class="text-muted">
+                          — {{ c.user|default:"(пользователь не указан)" }}
+                        </span><br>
+                        <small class="text-muted">
+                          {{ c.created_at }}
+                          {% if c.duration_seconds %}
+                            • длительность: {{ c.duration_seconds }} сек.
+                          {% endif %}
+                        </small>
+
+                        {% if c.recording %}
+                          <div class="mt-1">
+                            <a href="{{ c.recording.url }}" target="_blank">
+                              Скачать запись звонка
+                            </a>
+                          </div>
+                        {% endif %}
+
+                        {% if c.notes %}
+                          <div class="mt-1">{{ c.notes }}</div>
+                        {% endif %}
+                      </div>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="text-muted m-3">Звонков пока нет.</p>
+              {% endif %}
+            </div>
+          </div>
+
+        </div>
+
+        <!-- TAB: История -->
+        <div class="tab-pane fade" id="tab-history" role="tabpanel" aria-labelledby="history-tab">
+          <div class="card">
+            <div class="card-header">
+              История взаимодействий
+            </div>
+            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+              <ul class="list-group list-group-flush">
+                {% for note in notes %}
+                  <li class="list-group-item">
+                    <div class="d-flex justify-content-between">
+                      <div>
+                        <strong>
+                          {% if note.note_type == 'CALL' %}
+                            Звонок
+                          {% elif note.note_type == 'NOTE' and note.meta_type == 'SYSTEM' %}
+                            Событие по заметке
+                          {% elif note.note_type == 'NOTE' %}
+                            Заметка
+                          {% elif note.note_type == 'TRANSFER' %}
+                            Передача клиента
+                          {% elif note.note_type == 'EMAIL' %}
+                            Email
+                          {% elif note.note_type == 'SYSTEM' %}
+                            Системное событие
+                          {% else %}
+                            {{ note.get_note_type_display }}
+                          {% endif %}
+                        </strong>
+                        <small class="text-muted"> — {{ note.author|default:"Система" }}</small>
+                      </div>
+                      <small class="text-muted">{{ note.created_at }}</small>
+                    </div>
+                    <div class="mt-1">
+                      {{ note.text|linebreaksbr }}
+                    </div>
+                  </li>
+                {% empty %}
+                  <li class="list-group-item text-muted">
+                    История пока пуста.
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Правая колонка: клиентская информация -->
+  <div class="col-md-4 mb-4">
+
+    <div class="card mb-3">
+      <div class="card-header">
+        Основная информация
+      </div>
+      <div class="card-body">
+        {% with pc=client.preferred_contact %}
+
+          {# Телефоны #}
+          <div class="mb-2">
+            <div class="d-flex align-items-center mb-1">
+              {% if pc == 'PHONE' %}
+                <span class="text-warning me-1">★</span>
+              {% endif %}
+              <form method="post" class="d-inline" style="margin:0; padding:0;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="set_preferred_contact">
+                <input type="hidden" name="contact_type" value="PHONE">
+                <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">
+                  <strong>Телефон:</strong>
+                </button>
+              </form>
+            </div>
+
+            <div class="ms-3">
+              <div class="d-flex align-items-center mb-1">
+                <span>{{ client.phone|default:"-" }}</span>
+                {% if client.phone %}
+                  <button type="button"
+                          class="btn btn-sm btn-outline-secondary ms-2"
+                          onclick="copyToClipboard('{{ client.phone|escapejs }}')"
+                          title="Скопировать телефон">
+                    📋
+                  </button>
+                  <a href="{% url 'crm:client_start_call' client.id %}?number={{ client.phone|urlencode }}"
+                     class="btn btn-sm btn-outline-primary ms-2">
+                    Позвонить
+                  </a>
+                {% endif %}
+              </div>
+
+              {% for c in extra_contacts %}
+                {% if c.contact_type == 'PHONE' %}
+                  <div class="d-flex align-items-center mb-1">
+                    <span class="{% if c.id in conflict_extra_ids %}text-danger fw-semibold{% endif %}"
+                          {% if c.id in conflict_extra_ids %}title="Этот контакт уже есть у другого клиента (см. подсказку уведомлений)"{% endif %}>
+                      {{ c.value }}
+                      {% if c.comment %}
+                        <span class="text-muted"> ({{ c.comment }})</span>
+                      {% endif %}
+                    </span>
+
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary ms-2"
+                            onclick="copyToClipboard('{{ c.value|escapejs }}')"
+                            title="Скопировать телефон">
+                      📋
+                    </button>
+
+                    <a href="{% url 'crm:client_start_call' client.id %}?number={{ c.value|urlencode }}"
+                       class="btn btn-sm btn-outline-primary ms-2"
+                       title="Позвонить по этому номеру">
+                      Позвонить
+                    </a>
+
+                    <form method="post" class="ms-2 d-inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="make_primary_contact">
+                      <input type="hidden" name="contact_id" value="{{ c.id }}">
+                      <button type="submit" class="btn btn-sm btn-outline-success"
+                              title="Сделать основным номером">
+                        Сделать основным
+                      </button>
+                    </form>
+
+                    <form method="post" class="ms-2 d-inline"
+                          onsubmit="return confirm('Удалить этот дополнительный контакт?');">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="delete_contact">
+                      <input type="hidden" name="contact_id" value="{{ c.id }}">
+                      <button type="submit" class="btn btn-sm btn-outline-danger"
+                              title="Удалить контакт">
+                        ✕
+                      </button>
+                    </form>
+                  </div>
+                {% endif %}
+              {% endfor %}
+
+              <button type="button"
+                      class="btn btn-sm btn-outline-success mt-1"
+                      onclick="openExtraContactModal('PHONE')"
+                      title="Добавить телефон">
+                +
+              </button>
+            </div>
+          </div>
+
+          {# Email #}
+          <div class="mb-2">
+            <div class="d-flex align-items-center mb-1">
+              {% if pc == 'EMAIL' %}
+                <span class="text-warning me-1">★</span>
+              {% endif %}
+              <form method="post" class="d-inline" style="margin:0; padding:0;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="set_preferred_contact">
+                <input type="hidden" name="contact_type" value="EMAIL">
+                <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">
+                  <strong>Email:</strong>
+                </button>
+              </form>
+            </div>
+
+            <div class="ms-3">
+              <div class="d-flex align-items-center mb-1">
+                <span>{{ client.email|default:"-" }}</span>
+                {% if client.email %}
+                  <button type="button"
+                          class="btn btn-sm btn-outline-secondary ms-2"
+                          onclick="copyToClipboard('{{ client.email|escapejs }}')"
+                          title="Скопировать Email">
+                    📋
+                  </button>
+                {% endif %}
+              </div>
+
+              {% for c in extra_contacts %}
+                {% if c.contact_type == 'EMAIL' %}
+                  <div class="d-flex align-items-center mb-1">
+                    <span>
+                      {{ c.value }}
+                      {% if c.comment %}
+                        <span class="text-muted"> ({{ c.comment }})</span>
+                      {% endif %}
+                    </span>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary ms-2"
+                            onclick="copyToClipboard('{{ c.value|escapejs }}')"
+                            title="Скопировать Email">
+                      📋
+                    </button>
+                  </div>
+                {% endif %}
+              {% endfor %}
+
+              <button type="button"
+                      class="btn btn-sm btn-outline-success mt-1"
+                      onclick="openExtraContactModal('EMAIL')"
+                      title="Добавить email">
+                +
+              </button>
+            </div>
+          </div>
+
+          {# Telegram #}
+          <div class="mb-2">
+            <div class="d-flex align-items-center mb-1">
+              {% if pc == 'TELEGRAM' %}
+                <span class="text-warning me-1">★</span>
+              {% endif %}
+              <form method="post" class="d-inline" style="margin:0; padding:0;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="set_preferred_contact">
+                <input type="hidden" name="contact_type" value="TELEGRAM">
+                <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">
+                  <strong>Telegram:</strong>
+                </button>
+              </form>
+            </div>
+
+            <div class="ms-3">
+              <div class="d-flex align-items-center mb-1">
+                <span>{{ client.telegram|default:"-" }}</span>
+                {% if client.telegram %}
+                  <button type="button"
+                          class="btn btn-sm btn-outline-secondary ms-2"
+                          onclick="copyToClipboard('{{ client.telegram|escapejs }}')"
+                          title="Скопировать Telegram">
+                    📋
+                  </button>
+                {% endif %}
+              </div>
+
+              {% for c in extra_contacts %}
+                {% if c.contact_type == 'TELEGRAM' %}
+                  <div class="d-flex align-items-center mb-1">
+                    <span>
+                      {{ c.value }}
+                      {% if c.comment %}
+                        <span class="text-muted"> ({{ c.comment }})</span>
+                      {% endif %}
+                    </span>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary ms-2"
+                            onclick="copyToClipboard('{{ c.value|escapejs }}')"
+                            title="Скопировать Telegram">
+                      📋
+                    </button>
+                  </div>
+                {% endif %}
+              {% endfor %}
+
+              <button type="button"
+                      class="btn btn-sm btn-outline-success mt-1"
+                      onclick="openExtraContactModal('TELEGRAM')"
+                      title="Добавить Telegram">
+                +
+              </button>
+            </div>
+          </div>
+
+          {# WhatsApp #}
+          <div class="mb-2">
+            <div class="d-flex align-items-center mb-1">
+              {% if pc == 'WHATSAPP' %}
+                <span class="text-warning me-1">★</span>
+              {% endif %}
+              <form method="post" class="d-inline" style="margin:0; padding:0%;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="set_preferred_contact">
+                <input type="hidden" name="contact_type" value="WHATSAPP">
+                <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">
+                  <strong>WhatsApp:</strong>
+                </button>
+              </form>
+            </div>
+
+            <div class="ms-3">
+              <div class="d-flex align-items-center mb-1">
+                <span>{{ client.whatsapp|default:"-" }}</span>
+                {% if client.whatsapp %}
+                  <button type="button"
+                          class="btn btn-sm btn-outline-secondary ms-2"
+                          onclick="copyToClipboard('{{ client.whatsapp|escapejs }}')"
+                          title="Скопировать WhatsApp">
+                    📋
+                  </button>
+                {% endif %}
+              </div>
+
+              {% for c in extra_contacts %}
+                {% if c.contact_type == 'WHATSAPP' %}
+                  <div class="d-flex align-items-center mb-1">
+                    <span>
+                      {{ c.value }}
+                      {% if c.comment %}
+                        <span class="text-muted"> ({{ c.comment }})</span>
+                      {% endif %}
+                    </span>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary ms-2"
+                            onclick="copyToClipboard('{{ c.value|escapejs }}')"
+                            title="Скопировать WhatsApp">
+                      📋
+                    </button>
+                  </div>
+                {% endif %}
+              {% endfor %}
+
+              <button type="button"
+                      class="btn btn-sm btn-outline-success mt-1"
+                      onclick="openExtraContactModal('WHATSAPP')"
+                      title="Добавить WhatsApp">
+                +
+              </button>
+            </div>
+          </div>
+        {% endwith %}
+
+        <p class="mt-2"><strong>Ответственный:</strong> {{ client.responsible }}</p>
+        <p class="text-muted">
+          <small>Создан: {{ client.created_at }}<br>Обновлён: {{ client.updated_at }}</small>
+        </p>
+      </div>
+    </div>
+
+    <!-- Передать клиента -->
+    <div class="card">
+      <div class="card-header">
+        Передать клиента
+      </div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="transfer_client">
+          <div class="mb-3">
+            <label class="form-label">Новый ответственный</label>
+            <select name="new_responsible" class="form-select">
+              <option value="">-- Выберите --</option>
+              {% for u in all_users %}
+                <option value="{{ u.id }}" {% if client.responsible and client.responsible.id == u.id %}selected{% endif %}>
+                  {{ u.username }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Комментарий</label>
+            <textarea name="transfer_comment" class="form-control" rows="2"
+                      placeholder="Причина передачи, дополнительные детали"></textarea>
+          </div>
+          <button type="submit" class="btn btn-warning btn-sm w-100">Передать клиента</button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% if active_call and client.phone %}
+<div class="modal fade" id="activeCallModal" tabindex="-1" aria-labelledby="activeCallModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="activeCallModalLabel">Активный звонок</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body text-center">
+        <p class="small text-muted mb-2">
+          Идёт звонок (лог #{{ active_call.id }}). Наведите камеру телефона на QR-код, чтобы позвонить:
+        </p>
+        <div class="mb-2">
+          <img src="{% url 'crm:call_qr' client.id %}"
+               alt="QR-код для звонка"
+               class="img-fluid"
+               style="max-width: 220px;">
+        </div>
+        <div class="small text-muted mb-3">
+          {{ active_call.dialed_number|default:client.phone }}
+        </div>
+
+        <form method="post" enctype="multipart/form-data" class="text-start">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="finish_call">
+          <input type="hidden" name="call_log_id" value="{{ active_call.id }}">
+
+          <div class="mb-2">
+            <label for="id_call_recording_modal" class="form-label small mb-1">
+              Запись звонка (файл с телефона, опционально)
+            </label>
+            <input type="file" name="call_recording" id="id_call_recording_modal"
+                   class="form-control form-control-sm">
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center mt-3">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+              Закрыть
+            </button>
+            <button type="submit" class="btn btn-danger btn-sm">
+              Завершить звонок
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="modal fade" id="extraContactModal" tabindex="-1" aria-labelledby="extraContactModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_contact">
+        <input type="hidden" id="extra-contact-type-input" name="extra_contact_type" value="PHONE">
+
+        <div class="modal-header">
+          <h5 class="modal-title" id="extraContactModalLabel">Добавить контакт</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"
+                  aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label mb-1">Контакт</label>
+            <input type="text" name="extra_contact_value" id="extra-contact-value"
+                   class="form-control"
+                   placeholder="Номер, email, ник и т.п.">
+          </div>
+          <div class="mb-2">
+            <label class="form-label mb-1">Комментарий</label>
+            <input type="text" name="extra_contact_comment" id="extra-contact-comment"
+                   class="form-control"
+                   placeholder="Например: рабочий, личный, доп. номер">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Отмена</button>
+          <button type="submit" class="btn btn-success btn-sm">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'crm/tinymce/tinymce.min.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // --- TinyMCE для email ---
+  if (typeof tinymce !== 'undefined') {
+    tinymce.init({
+      selector: 'textarea[name="email_body"]',
+      menubar: false,
+      statusbar: false,
+      plugins: 'lists link image autoresize',
+      toolbar: 'undo redo | bold italic underline | bullist numlist | link image | removeformat',
+      branding: false,
+      height: 200,
+      license_key: 'gpl',
+      setup: function (editor) {
+        editor.on('change', function () {
+          editor.save();
+        });
+      }
+    });
+  }
+
+  // --- Вложения к email + AJAX-отправка письма ---
+  (function () {
+    const input = document.getElementById('email-attachments-input');
+    const listContainer = document.getElementById('email-attachments-list');
+    const form = document.getElementById('client-email-form');
+    const emailsList = document.getElementById('emails-list');
+    const emailsEmpty = document.getElementById('emails-empty');
+
+    // clientId прямо из Django, без DOM-вычислений
+    const clientId = {{ client.id }};
+
+    let attachedFiles = [];
+
+    if (!form || !clientId) return;
+
+    // отображение выбранных файлов
+    if (input && listContainer) {
+      input.addEventListener('change', function (event) {
+        const files = Array.from(event.target.files);
+        if (!files.length) return;
+
+        attachedFiles = attachedFiles.concat(files);
+        input.value = "";
+        renderFileList();
+      });
+
+      function renderFileList() {
+        listContainer.innerHTML = "";
+        if (!attachedFiles.length) return;
+        const ul = document.createElement('ul');
+        ul.className = "list-unstyled mb-0";
+        attachedFiles.forEach((file, index) => {
+          const li = document.createElement('li');
+          li.className = "d-flex justify-content-between align-items-center mb-1";
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = file.name;
+          const removeBtn = document.createElement('button');
+          removeBtn.type = "button";
+          removeBtn.className = "btn btn-sm btn-outline-danger ms-2";
+          removeBtn.textContent = "✕";
+          removeBtn.title = "Удалить из вложений";
+          removeBtn.addEventListener('click', function () {
+            attachedFiles.splice(index, 1);
+            renderFileList();
+          });
+          li.appendChild(nameSpan);
+          li.appendChild(removeBtn);
+          ul.appendChild(li);
+        });
+        listContainer.appendChild(ul);
+      }
+    }
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+
+      // ЖЁСТКО задаём правильный URL
+      const url = `/clients/${clientId}/`;
+      const formData = new FormData();
+
+      Array.from(form.elements).forEach(el => {
+        if (!el.name || el.type === 'file') return;
+        if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
+        formData.append(el.name, el.value);
+      });
+
+      if (input) {
+        (attachedFiles.length ? attachedFiles : Array.from(input.files || [])).forEach(file => {
+          formData.append('attachments', file, file.name);
+        });
+      }
+
+      fetch(url, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'same-origin'
+      })
+      .then(function (resp) {
+        if (!resp.ok && resp.status >= 500) {
+          throw new Error('Server error ' + resp.status);
+        }
+
+        const subjectField = form.querySelector('input[name="email_subject"]');
+        const bodyField = form.querySelector('textarea[name="email_body"]');
+        const subject = (subjectField && subjectField.value) ? subjectField.value : "(без темы)";
+        const bodyHtml = bodyField ? bodyField.value : "";
+
+        if (emailsList) {
+          if (emailsEmpty) {
+            emailsEmpty.style.display = 'none';
+          }
+
+          const li = document.createElement('li');
+          li.className = "list-group-item";
+
+          const headerDiv = document.createElement('div');
+          headerDiv.className = "d-flex justify-content_between";
+
+          const left = document.createElement('div');
+          const dirBadge = document.createElement('span');
+          dirBadge.className = "badge bg-primary me-1";
+          dirBadge.textContent = "Исходящее";
+          const subjStrong = document.createElement('strong');
+          subjStrong.textContent = subject || "(без темы)";
+          const fromSmall = document.createElement('small');
+          fromSmall.className = "text-muted d-block";
+          fromSmall.textContent = "От: (вы)";
+
+          left.appendChild(dirBadge);
+          left.appendChild(subjStrong);
+          left.appendChild(document.createElement('br'));
+          left.appendChild(fromSmall);
+
+          const rightSmall = document.createElement('small');
+          rightSmall.className = "text-muted";
+          const now = new Date();
+          const pad = n => (n < 10 ? '0' + n : '' + n);
+          rightSmall.textContent =
+            pad(now.getDate()) + '.' + pad(now.getMonth() + 1) + '.' + now.getFullYear() +
+            ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+
+          headerDiv.appendChild(left);
+          headerDiv.appendChild(rightSmall);
+
+          const bodyDiv = document.createElement('div');
+          bodyDiv.className = "mt-2";
+          bodyDiv.innerHTML = bodyHtml;
+
+          li.appendChild(headerDiv);
+          li.appendChild(bodyDiv);
+
+          if (emailsList.firstChild) {
+            emailsList.insertBefore(li, emailsList.firstChild);
+          } else {
+            emailsList.appendChild(li);
+          }
+
+          const lastIdAttr = emailsList.getAttribute('data-last-email-id');
+          if (lastIdAttr) {
+            const lastId = parseInt(lastIdAttr || '0', 10) || 0;
+            emailsList.setAttribute('data-last-email-id', String(lastId + 1));
+          }
+        }
+
+        if (input) {
+          if (listContainer) listContainer.innerHTML = "";
+          attachedFiles = [];
+        }
+        if (subjectField) subjectField.value = "";
+        if (bodyField) bodyField.value = "";
+
+        return resp.text();
+      })
+      .catch(function (err) {
+        console.error('Ошибка при отправке письма:', err);
+        alert('Не удалось отправить письмо. Проверьте соединение или попробуйте ещё раз.');
+      });
+    });
+  })();
+
+  // --- copyToClipboard ---
+  window.copyToClipboard = function (text) {
+    if (!navigator.clipboard) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+      } catch (e) {
+        alert('Не удалось скопировать');
+      } finally {
+        document.body.removeChild(textarea);
+      }
+      return;
+    }
+    navigator.clipboard.writeText(text).catch(function () {
+      alert('Не удалось скопировать');
+    });
+  };
+
+  // --- модалка доп. контактов ---
+  window.openExtraContactModal = function (contactType) {
+    const typeInput = document.getElementById('extra-contact-type-input');
+    const valueInput = document.getElementById('extra-contact-value');
+    const commentInput = document.getElementById('extra-contact-comment');
+    const titleEl = document.getElementById('extraContactModalLabel');
+
+    if (!typeInput || !valueInput || !commentInput || !titleEl) return;
+
+    typeInput.value = contactType || 'OTHER';
+    valueInput.value = '';
+    commentInput.value = '';
+
+    let titleSuffix = '';
+    if (contactType === 'PHONE') titleSuffix = ' (Телефон)';
+    else if (contactType === 'EMAIL') titleSuffix = ' (Email)';
+    else if (contactType === 'TELEGRAM') titleSuffix = ' (Telegram)';
+    else if (contactType === 'WHATSAPP') titleSuffix = ' (WhatsApp)';
+
+    titleEl.textContent = 'Добавить контакт' + titleSuffix;
+
+    const modalEl = document.getElementById('extraContactModal');
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+  };
+
+  // --- модалка активного звонка ---
+  const activeCallModalEl = document.getElementById('activeCallModal');
+  if (activeCallModalEl) {
+    const modal = new bootstrap.Modal(activeCallModalEl);
+    modal.show();
+  }
+
+  // --- ОТПРАВКА ОТВЕТА В TELEGRAM БЕЗ ПЕРЕЗАГРУЗКИ ---
+  (function () {
+    const form = document.getElementById('telegram-reply-form');
+    const input = document.getElementById('telegram-reply-text');
+    const dialogContainer = document.getElementById('telegram-dialog');
+
+    if (!form || !input || !dialogContainer) return;
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+
+      const text = (input.value || '').trim();
+      if (!text) {
+        return;
+      }
+
+      const url = window.location.href;
+      const formData = new FormData(form);
+
+      fetch(url, {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      })
+      .then(function () {
+        input.value = '';
+      })
+      .catch(function (err) {
+        console.error('Ошибка при отправке ответа в Telegram:', err);
+      });
+    });
+  })();
+
+  // --- ПОЛЛИНГ ДИАЛОГА TELEGRAM ---
+  (function () {
+    const container = document.getElementById('telegram-dialog');
+    if (!container) return;
+
+    const clientId = container.getAttribute('data-client-id');
+    let lastId = parseInt(container.getAttribute('data-last-id') || '0', 10) || 0;
+    const listEl = document.getElementById('telegram-dialog-list');
+    const emptyPlaceholder = document.getElementById('telegram-dialog-empty');
+    const wrapper = document.getElementById('telegram-dialog-wrapper');
+
+    function scrollDialogToBottom() {
+      const el = wrapper || container.parentElement;
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
+    }
+
+    function appendMessages(messages) {
+      if (!messages || !messages.length) return;
+
+      if (emptyPlaceholder) {
+        emptyPlaceholder.style.display = 'none';
+      }
+
+      messages.forEach(function (m) {
+        const li = document.createElement('li');
+        li.className = 'mb-2';
+        li.setAttribute('data-message-id', m.id);
+
+        const wrapperDiv = document.createElement('div');
+        wrapperDiv.className = 'd-flex ' + (m.sender === 'CLIENT' ? 'justify-content-start' : 'justify-content-end');
+
+        const bubble = document.createElement('div');
+        bubble.className = 'p-2 rounded ' + (m.sender === 'CLIENT'
+          ? 'bg-light border'
+          : 'bg-primary text-white');
+
+        const meta = document.createElement('div');
+        meta.className = 'small text-muted';
+        meta.textContent = (m.sender === 'CLIENT' ? 'Клиент' : 'Менеджер') + ' • ' + m.created_at;
+
+        const text = document.createElement('div');
+        text.textContent = m.text;
+
+        bubble.appendChild(meta);
+        bubble.appendChild(text);
+        wrapperDiv.appendChild(bubble);
+        li.appendChild(wrapperDiv);
+        listEl.appendChild(li);
+
+        lastId = m.id;
+      });
+
+      container.setAttribute('data-last-id', String(lastId));
+      scrollDialogToBottom();
+    }
+
+    function pollMessages() {
+      if (!clientId) return;
+      const url = `/clients/${clientId}/messages/poll/?last_id=${lastId}`;
+
+      fetch(url, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      })
+      .then(function (resp) {
+        if (!resp.ok) return null;
+        return resp.json();
+      })
+      .then(function (data) {
+        if (!data || !Array.isArray(data.messages)) return;
+        if (data.messages.length) {
+          appendMessages(data.messages);
+        }
+      })
+      .catch(function (err) {
+        console.error('Ошибка при опросе диалога Telegram:', err);
+      });
+    }
+
+    setTimeout(scrollDialogToBottom, 100);
+    setTimeout(pollMessages, 1000);
+    setInterval(pollMessages, 2000);
+  })();
+
+  // --- ПОЛЛИНГ ПИСЕМ EMAIL ---
+  (function () {
+    const emailsList = document.getElementById('emails-list');
+    const emailsEmpty = document.getElementById('emails-empty');
+    if (!emailsList) return;
+
+    function getLastEmailId() {
+      return parseInt(emailsList.getAttribute('data-last-email-id') || '0', 10) || 0;
+    }
+
+    const clientContainer = document.getElementById('telegram-dialog');
+    const clientId = clientContainer ? clientContainer.getAttribute('data-client-id') : null;
+    if (!clientId) return;
+
+    function appendEmails(emails) {
+      if (!emails || !emails.length) return;
+
+      if (emailsEmpty) {
+        emailsEmpty.style.display = 'none';
+      }
+
+      emails.forEach(function (e) {
+        const li = document.createElement('li');
+        li.className = "list-group-item";
+        li.setAttribute('data-email-id', e.id);
+
+        const headerDiv = document.createElement('div');
+        headerDiv.className = "d-flex justify-content_between";
+
+        const left = document.createElement('div');
+        const dirBadge = document.createElement('span');
+        dirBadge.className = "badge me-1 " + (e.direction === 'OUT' ? 'bg-primary' : 'bg-secondary');
+        dirBadge.textContent = e.direction === 'OUT' ? 'Исходящее' : 'Входящее';
+
+        const subjStrong = document.createElement('strong');
+        subjStrong.textContent = e.subject || "(без темы)";
+
+        const fromSmall = document.createElement('small');
+        fromSmall.className = "text-muted d-block";
+        fromSmall.textContent = "От: " + (e.from_address || "-");
+
+        left.appendChild(dirBadge);
+        left.appendChild(subjStrong);
+        left.appendChild(document.createElement('br'));
+        left.appendChild(fromSmall);
+
+        const rightSmall = document.createElement('small');
+        rightSmall.className = "text-muted";
+        rightSmall.textContent = e.received_at || "";
+
+        headerDiv.appendChild(left);
+        headerDiv.appendChild(rightSmall);
+
+        const bodyDiv = document.createElement('div');
+        bodyDiv.className = "mt-2";
+        bodyDiv.innerHTML = e.body || "";
+
+        li.appendChild(headerDiv);
+        li.appendChild(bodyDiv);
+
+        // новые письма добавляем сверху
+        if (emailsList.firstChild) {
+          emailsList.insertBefore(li, emailsList.firstChild);
+        } else {
+          emailsList.appendChild(li);
+        }
+
+        const currentLast = getLastEmailId();
+        if (e.id > currentLast) {
+          emailsList.setAttribute('data-last-email-id', String(e.id));
+        }
+      });
+    }
+
+    function pollEmails() {
+      const lastId = getLastEmailId();
+      const url = `/clients/${clientId}/emails/poll/?last_id=${lastId}`;
+
+      fetch(url, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      })
+      .then(function (resp) {
+        if (!resp.ok) return null;
+        return resp.json();
+      })
+      .then(function (data) {
+        if (!data || !Array.isArray(data.emails)) return;
+        if (data.emails.length) {
+          appendEmails(data.emails);
+        }
+      })
+      .catch(function (err) {
+        console.error('Ошибка при опросе писем:', err);
+      });
+    }
+
+    setTimeout(pollEmails, 2000);
+    setInterval(pollEmails, 5000); // каждые 5 секунд
+  })();
+
+});
+</script>
+{% endblock %}
